@@ -16,21 +16,30 @@ logic [7:0] normalized_exp;
 logic [22:0] normalized_mantissa; // 23-bit stored mantissa
 logic result_sign;
 
+// Register to hold the result
+logic [31:0] result_reg;
+
 // FSM
 typedef enum logic [2:0] { IDLE, EXTRACT, MULTIPLY, NORMALIZE, DONE } state_t;
 state_t state, next_state;
 
 // State transition
 always_ff @(posedge clk or negedge rst_n) begin
-  if (!rst_n) state <= IDLE;
-  else state <= next_state;
+  if (!rst_n) begin
+    state <= IDLE;
+    result_reg <= 0; // Reset the result register
+  end else begin
+    state <= next_state;
+    if (next_state == DONE) begin
+      result_reg <= {result_sign, normalized_exp, normalized_mantissa}; // Store the result
+    end
+  end
 end
 
 // FSM logic
 always @(*) begin
   next_state = state;
   done = 0;
-  p = 0;
 
   case (state)
     IDLE: begin
@@ -61,7 +70,6 @@ always @(*) begin
     end
 
     DONE: begin
-      p = {result_sign, normalized_exp, normalized_mantissa};
       done = 1;
       next_state = IDLE;
     end
@@ -69,5 +77,8 @@ always @(*) begin
     default: next_state = IDLE;
   endcase
 end
+
+// Output the result from the register
+assign p = result_reg;
 
 endmodule
