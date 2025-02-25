@@ -3,7 +3,9 @@ module f32_mult (
   input logic [31:0] a, b,
   input logic start,
   output logic done,
-  output logic [31:0] p
+  output logic [31:0] p,
+  output logic underflow_o,
+  output logic overflow_o
 );
 
 // Extract step
@@ -25,6 +27,9 @@ logic a_is_zero, b_is_zero;
 logic a_is_inf, b_is_inf;
 logic a_is_nan, b_is_nan;
 logic a_is_denormal, b_is_denormal;
+
+// Sinals that prepare the overflow or underflow output
+logic overflow_s, underflow_s;
 
 // Register to hold the result
 logic [31:0] result_reg;
@@ -55,6 +60,8 @@ always @(*) begin
   normalized_exp = 0;
   normalized_mantissa = 0;
   result_sign = 0;
+  overflow_o = 0;
+  underflow_o = 0;
 
   case (state)
     IDLE: begin
@@ -120,6 +127,20 @@ always @(*) begin
       normalized_mantissa = overflow ? mantissa_product[46:24] : mantissa_product[45:23];
       normalized_exp = e_a + e_b - 127 + overflow; // Adjust exponent
       result_sign = s_a ^ s_b;
+
+      // Exponent check
+      if (normalized_exp >= 8'hFF) begin
+          overflow_o = 1;
+          normalized_exp = 8'hFF;
+          normalized_mantissa = 0;
+      end else if (normalized_exp < 8'd1) begin
+          underflow_o = 1;
+          normalized_exp = 0;
+          normalized_mantissa = 0;
+      end else begin
+          overflow_o = 0;
+          underflow_o = 0;
+      end
       next_state = DONE;
     end
 

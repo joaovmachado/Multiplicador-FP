@@ -50,6 +50,10 @@ initial begin
   // $monitor("Time=%0t: rst_n=%b, a=%h, b=%h, start=%b, done=%b, p=%h",
   //           $time, rst_n, a, b, start, done, p);
 
+  a = 0;
+  b = 0;
+  start = 0;
+  
   // Wait for 10 cycles before the first start
   #100;
 
