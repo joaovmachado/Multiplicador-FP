@@ -4,6 +4,7 @@ logic clk, rst_n;
 logic [31:0] a, b;
 logic start, done;
 logic [31:0] p;
+logic underflow_o, overflow_o;
 
 f32_mult dut (
   .clk(clk),
@@ -12,7 +13,9 @@ f32_mult dut (
   .b(b),
   .start(start),
   .done(done),
-  .p(p)
+  .p(p),
+  .underflow_o(underflow_o),
+  .overflow_o(overflow_o)
 );
 
 // Clock generation

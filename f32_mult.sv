@@ -15,10 +15,11 @@ logic [23:0] m_a, m_b;       // 24-bit mantissa (1 implicit + 23 explicit)
 
 // Multiplication step
 logic [47:0] mantissa_product;
+logic signed [9:0] exp_sum;
 
 // Normalize step
 logic overflow;
-logic [7:0] normalized_exp;
+logic signed [9:0] normalized_exp; // exp + possible some overflow
 logic [22:0] normalized_mantissa; // 23-bit stored mantissa
 logic result_sign;
 
@@ -27,9 +28,6 @@ logic a_is_zero, b_is_zero;
 logic a_is_inf, b_is_inf;
 logic a_is_nan, b_is_nan;
 logic a_is_denormal, b_is_denormal;
-
-// Sinals that prepare the overflow or underflow output
-logic overflow_s, underflow_s;
 
 // Register to hold the result
 logic [31:0] result_reg;
@@ -46,7 +44,7 @@ always_ff @(posedge clk or negedge rst_n) begin
   end else begin
     state <= next_state;
     if (next_state == DONE) begin
-      result_reg <= {result_sign, normalized_exp, normalized_mantissa}; // Store the result
+      result_reg <= {result_sign, normalized_exp[7:0], normalized_mantissa}; // Store the result
     end
   end
 end
@@ -109,7 +107,7 @@ always @(*) begin
         end
         next_state = DONE;
       end else if ((a_is_zero || b_is_zero) ||
-                   (a_is_denormal || b_is_denormal)) begin
+                    (a_is_denormal || b_is_denormal)) begin
         result_sign = s_a ^ s_b;
         normalized_exp = 0;
         normalized_mantissa = 0; // Zero
@@ -117,6 +115,7 @@ always @(*) begin
       end else begin
         // Normal multiplication
         mantissa_product = m_a * m_b;
+        exp_sum = e_a + e_b - 127;
         next_state = NORMALIZE;
       end
     end
@@ -125,21 +124,30 @@ always @(*) begin
       // Normalize the mantissa product
       overflow = mantissa_product[47]; // Check if product >= 2.0
       normalized_mantissa = overflow ? mantissa_product[46:24] : mantissa_product[45:23];
-      normalized_exp = e_a + e_b - 127 + overflow; // Adjust exponent
+      normalized_exp = exp_sum + overflow; // Adjust exponent
       result_sign = s_a ^ s_b;
 
+      overflow_o = 0;
+      underflow_o = 0;
+
       // Exponent check
-      if (normalized_exp >= 8'hFF) begin
-          overflow_o = 1;
-          normalized_exp = 8'hFF;
-          normalized_mantissa = 0;
-      end else if (normalized_exp < 8'd1) begin
-          underflow_o = 1;
+      if (normalized_exp >= 9'sd255) begin
+        $display("<i>Result too big, round to inf");
+        overflow_o = 1;
+        normalized_exp = 8'hFF;
+        normalized_mantissa = 0; // Infinity
+      end else if (normalized_exp < 9'sd1) begin
+        underflow_o = 1;
+        if (normalized_exp >= -9'sd126) begin
+          $display("<i>Subnormal result");
+          // Gradual underflow (denormal number)
+          normalized_mantissa = mantissa_product[46:24] >> (-normalized_exp);
+          normalized_exp = 0;
+        end else begin
+          // Too small, set to zero
           normalized_exp = 0;
           normalized_mantissa = 0;
-      end else begin
-          overflow_o = 0;
-          underflow_o = 0;
+        end
       end
       next_state = DONE;
     end
