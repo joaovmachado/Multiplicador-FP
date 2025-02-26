@@ -82,7 +82,7 @@ initial begin
 
     // Compare actual result with expected result
     if (p === expected_p) begin
-      $display("Test PASSED: a=%h, b=%h, p=%h (expected=%h)", a, b, p, expected_p);
+      // $display("Test PASSED: a=%h, b=%h, p=%h (expected=%h)", a, b, p, expected_p);
     end else begin
       $display("Test FAILED: a=%h, b=%h, p=%h (expected=%h)", a, b, p, expected_p);
       error_count = error_count + 1; // Increment error counter

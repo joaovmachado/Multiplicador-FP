@@ -15,11 +15,11 @@ logic [23:0] m_a, m_b;       // 24-bit mantissa (1 implicit + 23 explicit)
 
 // Multiplication step
 logic [47:0] mantissa_product;
-logic signed [9:0] exp_sum;
+logic signed [10:0] exp_sum;
 
 // Normalize step
 logic overflow;
-logic signed [9:0] normalized_exp; // exp + possible some overflow
+logic signed [10:0] normalized_exp; // exp + possible some overflow
 logic [22:0] normalized_mantissa; // 23-bit stored mantissa
 logic result_sign;
 
@@ -72,8 +72,8 @@ always @(*) begin
       s_b = b[31];
       e_a = a[30:23];
       e_b = b[30:23];
-      m_a = {1'b1, a[22:0]};  // Add implicit leading 1
-      m_b = {1'b1, b[22:0]};  // Add implicit leading 1
+      m_a = a[22:0];  // Raw mantissa (no hidden bit yet)
+      m_b = b[22:0];
 
       // Check for special cases
       a_is_zero = (e_a == 0) && (a[22:0] == 0);
@@ -84,6 +84,19 @@ always @(*) begin
       b_is_nan = (e_b == 8'hFF) && (b[22:0] != 0);
       a_is_denormal = (e_a == 0) && (a[22:0] != 0);
       b_is_denormal = (e_b == 0) && (b[22:0] != 0);
+
+      // Adjust mantissa for denormals (set hidden bit to 0)
+      if (a_is_denormal) begin
+        m_a = {1'b0, a[22:0]}; // Denormal: hidden bit = 0
+      end else begin
+        m_a = {1'b1, a[22:0]}; // Normal: hidden bit = 1
+      end
+
+      if (b_is_denormal) begin
+        m_b = {1'b0, b[22:0]}; // Denormal: hidden bit = 0
+      end else begin
+        m_b = {1'b1, b[22:0]}; // Normal: hidden bit = 1
+      end
 
       next_state = MULTIPLY;
     end
@@ -104,7 +117,7 @@ always @(*) begin
         // Specification Exception Required, out ieee 754
         result_sign = 0; // NaN is signless
         normalized_exp = 8'hFF;
-        normalized_mantissa = 23'h7FFFFF; //signaling nan
+        normalized_mantissa = 23'h7FFFFF; // nan
         overflow_o = 1'b1;
         // if (a_is_zero || b_is_zero) begin
         //   result_sign = 0; // NaN is signless
@@ -118,7 +131,7 @@ always @(*) begin
         // end
         next_state = DONE;
       end else if ((a_is_zero || b_is_zero) ||
-                    (a_is_denormal || b_is_denormal)) begin
+                    (a_is_denormal && b_is_denormal)) begin
         result_sign = s_a ^ s_b;
         normalized_exp = 0;
         normalized_mantissa = 0; // Zero
@@ -143,17 +156,22 @@ always @(*) begin
 
       // Exponent check
       if (normalized_exp >= 9'sd255) begin
-        $display("<i>Result too big, signaling SNaN____________\n");
+        // $display("<i>Result too big, signaling SNaN____________");
         overflow_o = 1;
         normalized_exp = 8'hFF;
         // normalized_mantissa = 0; // Infinity
         normalized_mantissa = 23'h7FFFFF; // Specification Required exception
       end else if (normalized_exp < 9'sd1) begin
         underflow_o = 1;
+        result_sign = 0;
         if (normalized_exp >= -9'sd126) begin
-          $display("<i>Subnormal result____________\n");
+          // $display("<i>Subnormal result____________");
           // Gradual underflow (denormal number)
-          normalized_mantissa = mantissa_product[46:24] >> (-normalized_exp);
+          if (a_is_denormal || b_is_denormal) 
+            normalized_mantissa = mantissa_product[45:23] >> (-normalized_exp);
+          else
+            normalized_mantissa = mantissa_product[46:24] >> (-normalized_exp);
+
           normalized_exp = 0;
         end else begin
           // Too small, set to zero
@@ -161,6 +179,7 @@ always @(*) begin
           normalized_mantissa = 0;
         end
       end
+
       next_state = DONE;
     end
 
