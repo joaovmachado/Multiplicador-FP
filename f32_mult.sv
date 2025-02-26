@@ -91,20 +91,31 @@ always @(*) begin
     MULTIPLY: begin
       // Handle special cases
       if (a_is_nan || b_is_nan) begin
+        // Specification Exception Required, out ieee 754
+        result_sign = 0; // NaN is signless
+        normalized_exp = 8'h00;
+        normalized_mantissa = 23'h000000; // Zero
+        next_state = DONE;
+        // result_sign = 0; // NaN is signless
+        // normalized_exp = 8'hFF;
+        // normalized_mantissa = 23'h400000; // Quiet NaN
+        // next_state = DONE;
+      end else if (a_is_inf || b_is_inf) begin
+        // Specification Exception Required, out ieee 754
         result_sign = 0; // NaN is signless
         normalized_exp = 8'hFF;
-        normalized_mantissa = 23'h400000; // Quiet NaN
-        next_state = DONE;
-      end else if (a_is_inf || b_is_inf) begin
-        if (a_is_zero || b_is_zero) begin
-          result_sign = 0; // NaN is signless
-          normalized_exp = 8'hFF;
-          normalized_mantissa = 23'h400000; // Quiet NaN
-        end else begin
-          result_sign = s_a ^ s_b;
-          normalized_exp = 8'hFF;
-          normalized_mantissa = 0; // Infinity
-        end
+        normalized_mantissa = 23'h7FFFFF; //signaling nan
+        overflow_o = 1'b1;
+        // if (a_is_zero || b_is_zero) begin
+        //   result_sign = 0; // NaN is signless
+        //   normalized_exp = 8'hFF;
+        //   normalized_mantissa = 23'h7FFFFF; // Specification Required exception
+        //   overflow_o = 1'b1;
+        // end else begin
+        //   result_sign = s_a ^ s_b;
+        //   normalized_exp = 8'hFF;
+        //   normalized_mantissa = 0; // Infinity
+        // end
         next_state = DONE;
       end else if ((a_is_zero || b_is_zero) ||
                     (a_is_denormal || b_is_denormal)) begin
@@ -132,14 +143,15 @@ always @(*) begin
 
       // Exponent check
       if (normalized_exp >= 9'sd255) begin
-        $display("<i>Result too big, round to inf");
+        $display("<i>Result too big, signaling SNaN____________\n");
         overflow_o = 1;
         normalized_exp = 8'hFF;
-        normalized_mantissa = 0; // Infinity
+        // normalized_mantissa = 0; // Infinity
+        normalized_mantissa = 23'h7FFFFF; // Specification Required exception
       end else if (normalized_exp < 9'sd1) begin
         underflow_o = 1;
         if (normalized_exp >= -9'sd126) begin
-          $display("<i>Subnormal result");
+          $display("<i>Subnormal result____________\n");
           // Gradual underflow (denormal number)
           normalized_mantissa = mantissa_product[46:24] >> (-normalized_exp);
           normalized_exp = 0;
