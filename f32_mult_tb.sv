@@ -4,7 +4,6 @@ logic clk, rst_n;
 logic [31:0] a, b;
 logic start, done;
 logic [31:0] p;
-logic underflow_o, overflow_o;
 
 f32_mult dut (
   .clk(clk),
@@ -13,9 +12,7 @@ f32_mult dut (
   .b(b),
   .start(start),
   .done(done),
-  .p(p),
-  .underflow_o(underflow_o),
-  .overflow_o(overflow_o)
+  .p(p)
 );
 
 // Clock generation
@@ -37,6 +34,7 @@ logic [31:0] a_file, b_file, expected_p;
 
 // Error counter
 integer error_count = 0;
+integer line_num = 0;
 
 initial begin
   $dumpfile("wave.vcd"); // Specify the VCD file name
@@ -80,11 +78,13 @@ initial begin
     // Wait for done signal
     wait (done == 1'b1);
 
+    line_num = line_num + 1;
+
     // Compare actual result with expected result
     if (p === expected_p) begin
       // $display("Test PASSED: a=%h, b=%h, p=%h (expected=%h)", a, b, p, expected_p);
     end else begin
-      $display("Test FAILED: a=%h, b=%h, p=%h (expected=%h)", a, b, p, expected_p);
+      $display("(T%3d) Test FAILED: a=%h, b=%h, p=%h (expected=%h)", line_num, a, b, p, expected_p);
       error_count = error_count + 1; // Increment error counter
     end
 
